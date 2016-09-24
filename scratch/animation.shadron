@@ -1,5 +1,5 @@
 #include <hsv>
-image Texture = file():mirror;
+image Texture = file();
 image MyText = text("Demod", "Arial", regular, 64, center, ivec2(560, 560));
 
 glsl vec4 sampleMyAnimationFrame(vec2 pos, float time)
