@@ -1,0 +1,5 @@
+#define STR_F_HOOK "helloo"
+#define STR_F_INSIGHT "[Insert long insight line here that talks to the person as if I'm being honest.  Also ask me a question.]"
+
+#define STR_B_CONTACT "John Doe\nSoftware Engineer / R&D\n123-456-7890\nJohn.Doe@mail.fake"
+#define STR_B_SHORTINFO "www.johndoe.fake\n4 Years\n8 Years"

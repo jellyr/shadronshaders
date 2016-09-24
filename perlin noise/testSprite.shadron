@@ -1,0 +1,36 @@
+#include <utility>
+
+image BackGround = file();
+image Sprite = file();
+image StaticText = text("Static Sprite!", "Helvetica", regular, 32, center, ivec2(200, 34));
+image VariableText = text("Variable Sprite!", "Helvetica", regular, 32, center, ivec2(200, 34));
+
+param vec2 location = vec2(400,200) : range(vec2(0,0),vec2(1000,1000));
+param vec2 size = vec2(128,128) : range(vec2(-500,-500),vec2(500,500));
+param vec2 anchor = vec2(CENTER,CENTER) : range(vec2(LEFT,BOTTOM),vec2(RIGHT,TOP));
+
+template<INTERVAL>
+glsl vec4 RainbowColor(vec2 pos) {
+    float theta = 6.28318 * (shadron_Time / INTERVAL);
+    return vec4(sin(theta)/2+0.5,sin(theta+2.09439)/2+0.5,sin(theta+4.18879)/2+0.5,1.0);
+}
+
+glsl vec4 OutputPass(vec2 pos, float time) {
+    vec4 col = texture(BackGround,pos);
+    
+    //Sprites with params baked into the template (Static)
+    col = layer(col,sprite<vec2(100,100),sizeof(Sprite),vec2(LEFT,BOTTOM),invert<texImg<Sprite>>>(pos));
+    col = layer(col,sprite<vec2(100,50),sizeof(StaticText),vec2(LEFT,BOTTOM),masked<StaticText,texColor<vec4(0,0,1,1)>>>(pos));
+
+    //Sprites with params that can change (Variable)
+    col = layer(col,varSprite<texImg<Sprite>>(pos,location,size,anchor));
+    col = layer(col,varSprite<masked<VariableText,RainbowColor<4>>>(pos,location,sizeof(VariableText),vec2(1,1)-anchor));
+
+    //Draw a dot where the location is
+    if (length(location - (pos*shadron_Dimensions))<5) {
+        col = layer(col,vec4(1,0,0,0.5));
+    }
+
+    return col;
+}
+animation Output = glsl(OutputPass,sizeof(BackGround));

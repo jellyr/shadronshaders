@@ -1,0 +1,128 @@
+#include <shapes>
+#include <perlin>
+#include <worley>
+#include <math_constants>
+
+#include "util.shadron"
+
+#include "Fake/BusinessCardText.def"
+
+const float DPI = 300;
+
+//Inches
+const vec2 CARD_SIZE = vec2(3.5,2.0);
+const vec2 CARD_CENTER = CARD_SIZE / 2;
+
+const ivec2 CARD_SIZE_PIXELS = CARD_SIZE * DPI;
+
+image Logo = file("logo.png") : filter(bilinear);
+image QRCodeRaw = file("Fake/qrcode.png");
+image QRCode = glsl(invert<texImg<QRCodeRaw>>, sizeof(QRCodeRaw)) : filter(none);
+image Education = file("education.png");
+image Work = file("work.png");
+
+image FrontHookText = text(STR_F_HOOK, "Helvetica", regular, 80, center, ivec2(920, 90));
+image FrontInsightText = text(STR_F_INSIGHT, "Helvetica", regular, 22, right, ivec2(860, 24));
+
+image BackContactText = text(STR_B_CONTACT, "Helvetica", bold, 48, left, ivec2(520, 200));
+image BackShortInfoText = text(STR_B_SHORTINFO, "Helvetica", regular, 40, right, ivec2(360, 140));
+
+template<SCALE, IMAGE, ANCHOR>
+glsl vec4 sprite(vec4 bg, vec2 coord, vec2 location) {
+	vec2 tex = (coord-location) / (sizeof(IMAGE) / DPI) + ANCHOR;
+	tex = tex / SCALE;
+	if (all(greaterThanEqual(tex,vec2(0,0)) && lessThanEqual(tex,vec2(1,1)))) {
+		return texture(IMAGE, tex);
+	}
+	return bg;
+}
+
+glsl vec4 FrontBgPass(vec2 pos) {
+	vec2 coord = pos * CARD_SIZE;
+	vec4 col = vec4(0.11,0.11,0.13,1);
+	
+	vec2 scales_w = worleyNoise((coord-CARD_CENTER)*2*(3+2*length(coord-CARD_CENTER)))*(coord-CARD_CENTER);
+	vec2 scatex_w = worleyNoise((coord-CARD_CENTER)*(20+4*length(coord-CARD_CENTER)))*(coord-CARD_CENTER);
+	
+	float scales = abs(scales_w.y-scales_w.x)*(0.5+2*pow(length(coord-CARD_CENTER),2))-0.5;
+	float scatex = abs(scatex_w.y-scatex_w.x)*(0.25+2*pow(length(coord-CARD_CENTER),2))/4-0.5;
+	
+	col = layer(col,clamp(vec4(1-scatex,1-scatex,1-scatex*0.79,(scales)/10),0,1));
+	
+	return col;
+}
+image FrontBg = glsl(FrontBgPass, CARD_SIZE_PIXELS);
+
+glsl vec4 BackBgPass(vec2 pos) {
+	vec4 bgDiffuse = bgFill<vec4(0,0,0,1),normalDiffuse<vec4(1,1,1,1),vec3(-0.5,1,0.75),mirrorX<texImg<FrontBg>>,0.1,5>>(pos);
+	
+	vec4 col = vec4(1-max(vec4(0),bgDiffuse).rgb*0.5,1);
+	
+	return col;
+}
+image BackBg = glsl(BackBgPass, CARD_SIZE_PIXELS);
+
+glsl vec4 FrontTextPass(vec2 pos) {
+	vec2 coord = pos * CARD_SIZE;
+	
+	coord = CARD_CENTER + (coord-CARD_CENTER)*(1+vec2(0,0.02)*max(0,length(CARD_CENTER)-length(coord-CARD_CENTER)));
+	
+	vec4 col = vec4(0,0,0,1);
+	col = max(col,sprite<1,FrontHookText,vec2(0.5,0.5)>(col,coord,CARD_CENTER));
+	col = max(col,sprite<1,FrontInsightText,vec2(1,0)>(col,coord,vec2(3.4,0.02)));
+	
+	col = vec4(1,1,1,length(col.rgb));
+	return col;
+}
+image FrontText = glsl(FrontTextPass, CARD_SIZE_PIXELS*2);
+image FrontTextShadow = glsl(noiseDistort<30,blur<5,normalMap<0.1,blur<5,texImg<FrontBg>>>>,shift<vec2(-5,10),grow<7,texImg<FrontText>>>>, CARD_SIZE_PIXELS);
+
+glsl vec4 BackTextPass(vec2 pos) {
+	vec2 coord = pos * CARD_SIZE;
+	
+	coord = CARD_CENTER + (coord-CARD_CENTER)*(1+vec2(0,0.02)*max(0,length(CARD_CENTER)-length(coord-CARD_CENTER)));
+	
+	vec4 col = vec4(0,0,0,1);
+	col = max(col,sprite<1,BackContactText,vec2(0,1)>(col,coord,vec2(0.05,1.95)));
+	col = max(col,sprite<1.5,QRCode,vec2(0,0.5)>(col,coord,vec2(0,0.64)));
+	col = max(col,sprite<1,BackShortInfoText,vec2(1,0)>(col,coord,vec2(3.375,0.025)));
+	col = max(col,sprite<0.2,Education,vec2(0.5,0.5)>(col,coord,vec2(3.225,0.625)));
+	col = max(col,sprite<0.19,Work,vec2(0.5,0.5)>(col,coord,vec2(3.23,0.51)));
+	
+	
+	col = vec4(1,1,1,length(col.rgb));
+	return col;
+}
+image BackText = glsl(BackTextPass, CARD_SIZE_PIXELS*2);
+image BackTextShadow = glsl(noiseDistort<30,blur<5,normalMap<0.1,blur<5,texImg<BackBg>>>>,shift<vec2(-5,10),grow<7,texImg<BackText>>>>, CARD_SIZE_PIXELS);
+
+glsl vec4 FrontPass(vec2 pos) {
+	vec2 coord = pos * CARD_SIZE;
+	
+	vec4 bgPass = texture(FrontBg,pos);
+	vec4 textPass = texture(FrontText,pos);
+	vec4 textShadow = texture(FrontTextShadow,pos);
+	
+	vec4 col = bgPass;
+	col = vec4(col.rgb*(1-length(col.rgb)*clamp(textShadow.a,0,1)),col.a);
+	col = layer(col,textPass*vec4(0.9,0.9,0.9,1));
+	
+	return col;
+}
+image Front = glsl(FrontPass, CARD_SIZE_PIXELS);
+
+glsl vec4 BackPass(vec2 pos) {
+	vec2 coord = pos * CARD_SIZE;
+	
+	vec4 bgPass = texture(BackBg,pos);
+	vec4 textPass = texture(BackText,pos);
+	vec4 textShadow = texture(BackTextShadow,pos);
+	
+	vec4 col = bgPass;
+	col = layer(col,vec4(0,0,0,textShadow.a)*0.1);
+	col = layer(col,textPass*vec4(0.1,0.1,0.1,1));
+	col = layer(col,sprite<0.2,Logo,vec2(0,0)>(col,coord,vec2(0.025,0.025)));
+	
+	return col;
+}
+image Back = glsl(BackPass, CARD_SIZE_PIXELS);

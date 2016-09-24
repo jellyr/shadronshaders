@@ -1,0 +1,107 @@
+#include <math_constants>
+#include <affine_transform>
+#include <lighting>
+#include <cube>
+#include <perlin>
+#include <utility>
+param vec2 location = vec2(400,200) : range(vec2(0,0),vec2(1080,1080));
+param vec2 size = vec2(128,128) : range(vec2(-500,-500),vec2(500,500));
+param vec2 anchor = vec2(CENTER,CENTER) : range(vec2(LEFT,BOTTOM),vec2(RIGHT,TOP));
+// Rotation of the cube
+parameter vec2 rotation = vec2(-0.375, 0.4375) : range(-PI, +PI);
+// Distance between the camera and the center of the cube
+parameter float distance = 6.0 : range(16.0);
+// Field of view
+parameter float FOV = 0.5*PI : range(0.0, PI);
+// Near/far values for projection (minimum and maximum draw distance)
+const float NEAR = 1.0/256.0, FAR = 256.0;
+// Direction of incoming light
+const vec3 lightDirection = vec3(0.0, 0.0, -1.0);
+// Size of the image
+const int SIZE = 4096;
+// Number of iteration in the fractal noise computation
+const int FRACTAL_STEPS = 16;
+// Scale of the noise
+parameter float scale_fractal = 8.0 : logrange(1.0, 64.0);
+image MyText = text("cube", "Arial", regular, 40, center, ivec2(200, 40));
+
+
+// Basic perlin noise rescaled from (-1, +1) to (0, 1)
+glsl float basicPerlin(vec2 pos) {
+    float p = perlinNoise(scale_fractal*pos);
+    return 0.5 + 0.5*p;
+}
+
+
+
+// A template that samples FN at different scales and adds them together - the fractal noise
+template <FN, STEPS>
+glsl float fractal(vec2 pos) {
+    float total = 0.0;
+    float factor = 1.0;
+    for (int i = 0; i < STEPS; ++i) {
+        factor *= 0.5;
+        total += factor*FN(pos-vec2(i));
+        pos *= 2.0;
+    }
+    return total;
+}
+
+// Noise images get rid of these when not running trough shadron 
+image BasicPerlinNoise = glsl(basicPerlin, ivec2(SIZE));
+
+image FractalPerlinNoise = glsl(fractal<basicPerlin, FRACTAL_STEPS>, ivec2(SIZE));
+
+
+// The input texture
+//image Texture = file() : filter(anisotropic);
+
+// The fragment data passed from the vertex shader to the fragment shader
+glsl struct FragmentData {
+    vec2 texCoord;
+    vec3 normal;
+};
+
+// The vertex shader
+glsl vec4 vertexShader(out FragmentData f, int index) {
+    // Acquire vertex coordinate, texture coordinate, and normal vector
+    vec3 coord = cubeCoord(index);
+    f.texCoord = cubeTexCoord(index);
+    f.normal = cubeNormal(index);
+
+    // Transform coordinate
+    coord = rotateY(coord, rotation.x);
+    coord = rotateX(coord, rotation.y);
+    coord = translate(coord, vec3(0.0, 0.0, -distance));
+
+    // Transform normal
+    f.normal = rotateY(f.normal, rotation.x);
+    f.normal = rotateX(f.normal, rotation.y);
+
+    // Perspective projection
+    return projectPerspectiveHFOV(coord, FOV, NEAR, FAR);
+}
+
+// The fragment shader
+glsl vec4 fragmentShader(in FragmentData f) {
+     float lightness = mix(1.0, diffuseLight(lightDirection, f.normal), 0.01);
+    return lightness*texture(FractalPerlinNoise, f.texCoord);
+}
+
+// Cube model definition
+model image Cube :
+    fragment_data(FragmentData),
+    vertex(vertexShader, triangles, CUBE_VERTEX_COUNT),
+    fragment(fragmentShader),
+    multisample(4),
+    dimensions(1920,1080);
+
+glsl vec4 text(vec2 pos)
+{
+   vec4 col = texture(MyText, pos);
+   col.a = 0.0;
+   col = layer(col,varSprite<masked<MyText,texColor<vec4(1.0,0.0,0.0,0.8)>>>(pos,location,size,anchor));
+   vec4 final = mix(col,texture(Cube,pos),0.5);
+   return final;
+}
+image textout = glsl(text, sizeof(Cube));

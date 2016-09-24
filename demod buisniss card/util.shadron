@@ -1,0 +1,106 @@
+
+template<IMAGE>
+glsl vec4 texImg(vec2 pos) {
+	return texture(IMAGE, pos);
+}
+
+glsl vec4 layer(vec4 bg, vec4 fg) {
+	float a = fg.a+bg.a*(1-fg.a);
+	return vec4(((fg*fg.a+bg*bg.a*(1-fg.a))/a).rgb,a);
+}
+
+template<GLFUNC>
+glsl vec4 invert(vec2 pos) {
+	vec4 col = GLFUNC(pos);
+	return vec4(1-col.rgb,col.a);
+}
+
+glsl float luminosity(vec4 col) {
+	return col.r*0.2126 + col.g*0.7152 + col.b*0.0722;
+}
+
+template<COLOR,GLFUNC>
+glsl vec4 bgFill(vec2 pos) {
+	return layer(COLOR,GLFUNC(pos));
+}
+
+template<SIZE,GLFUNC>
+glsl vec4 blur(vec2 pos) {
+	vec4 col = vec4(0);
+	int count = 0;
+	for (int x=0;x<SIZE;x++) {
+		for (int y=0;y<SIZE;y++) {
+			vec2 offset = vec2(x,y)-vec2(SIZE/2.0,SIZE/2.0);
+			float dist = length(offset);
+			if (dist<=SIZE/2.0) {
+				col = col + max(vec4(0),GLFUNC(pos+offset*shadron_PixelSize));
+				count++;
+			}
+		}
+	}
+	col = col / count;
+	return col;
+}
+
+template<SIZE,GLFUNC>
+glsl vec4 grow(vec2 pos) {
+	vec4 col = vec4(0);
+	for (int x=0;x<SIZE;x++) {
+		for (int y=0;y<SIZE;y++) {
+			vec2 offset = vec2(x,y)-vec2(SIZE)/2.0;
+			float dist = length(offset);
+			if (dist<=SIZE/2.0) {
+				col = max(col,GLFUNC(pos+offset*shadron_PixelSize));
+			}
+		}
+	}
+	return col;
+}
+
+template<SHIFT,GLFUNC>
+glsl vec4 shift(vec2 pos) {
+	return GLFUNC(pos+SHIFT*shadron_PixelSize);
+}
+
+template<GLFUNC>
+glsl vec4 mirrorX(vec2 pos) {
+	return GLFUNC(vec2(1-pos.x,pos.y));
+}
+
+template <SCALE,GLFUNC>
+glsl vec4 normalMap(vec2 pos) {
+	float l = luminosity(GLFUNC(pos));
+	vec2 delta = vec2(l-luminosity(GLFUNC(pos-vec2(shadron_PixelSize.x,0))),
+					  l-luminosity(GLFUNC(pos-vec2(0,shadron_PixelSize.y))));
+	vec3 normal;
+	normal.x = sin(atan(-delta.x/SCALE));
+	normal.y = sin(atan(-delta.y/SCALE));
+	normal.z = sqrt(1-normal.x*normal.x-normal.y*normal.y);
+	return vec4(normal,1);
+}
+//image NormalTest = glsl(blur<5,normalMap<0.01,blur<5,FrontBgPass>>>, CARD_SIZE_PIXELS);
+
+template <COLOR,LIGHTDIR,GLNORMALFUNC,SCALE,BLURSIZE>
+glsl vec4 normalDiffuse(vec2 pos) {
+	vec3 normal = normalize(blur<BLURSIZE,normalMap<SCALE,blur<BLURSIZE,GLNORMALFUNC>>>(pos).xyz);
+	return COLOR * dot(normal,normalize(LIGHTDIR));
+}
+//image NormalDiffuseTest = glsl(bgFill<vec4(0,0,0,1),normalDiffuse<vec4(1,1,1,1),vec3(-0.5,1,0.75),FrontBgPass,0.1,5>>,CARD_SIZE_PIXELS);
+
+template <DISTANCE,GLNORMALFUNC,GLFUNC>
+glsl vec4 noiseDistort(vec2 pos) {
+	vec3 normal = GLNORMALFUNC(pos).xyz;
+	vec2 offset = (normal*DISTANCE).xy * shadron_PixelSize;
+	return GLFUNC(pos+offset);
+}
+//image NoiseDistortTest = glsl(bgFill<vec4(0,0,0,1),noiseDistort<0.1,5,30,FrontBgPass,grow<10,FrontTextPass>>>, CARD_SIZE_PIXELS);
+
+template<SCALE, IMAGE, ANCHOR>
+glsl vec4 sprite(vec4 bg, vec2 coord, vec2 location) {
+	vec2 tex = (coord-location) / (sizeof(IMAGE) / DPI) + ANCHOR;
+	tex = tex / SCALE;
+	if (all(greaterThanEqual(tex,vec2(0,0)) && lessThanEqual(tex,vec2(1,1)))) {
+		return texture(IMAGE, tex);
+	}
+	return bg;
+}

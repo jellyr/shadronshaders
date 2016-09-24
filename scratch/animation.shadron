@@ -1,0 +1,36 @@
+#include <hsv>
+image Texture = file():mirror;
+image MyText = text("Demod", "Arial", regular, 64, center, ivec2(560, 560));
+
+glsl vec4 sampleMyAnimationFrame(vec2 pos, float time)
+    {
+     vec4 sample2 = texture(MyText, pos);
+	//Convert pos into pixels
+	vec2 pos_px = pos;
+    //Warp the pos_px to make it wavy
+	//pos.y = pos.y + (10/512)*sin(time+pos.x/(30/512));
+    pos_px.x += sin(pos.y*2.0+time * .5)/25.0;
+    pos_px.y +=sin(pos.x*1.0+time*.5)/25;
+   
+    vec4 sample = texture(Texture, pos_px);
+	
+    
+    
+   
+    vec4 final = mix(sample,sample2,0.5);
+
+    //float r = length(pos);
+    float h = hue(final); // gets hue
+    float s = saturation(final); //gets saturation
+    float v = value(final); //gets value
+    h = h + shadron_Time/10; // increase hue by using the shadron timer
+    if (h < 0.0) // make sure the hue doesnt get too low or to high
+        h = h +1 ;
+    else if (h > 1.0)
+        h = h- 1;
+    return vec4(hsv(h,s,v),final.a);
+    }
+
+animation MyAnimation = glsl(sampleMyAnimationFrame, 512, 512);
+
+export png_sequence(MyAnimation,"test?.png", 25, 10);

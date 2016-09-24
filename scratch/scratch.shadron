@@ -1,0 +1,15 @@
+const vec4 ORANGE = vec4(1.0,0.5,0.0,1.0);
+const vec4 TRANSPARENT = vec4(1.0,1.0,1.0,1.0);
+
+parameter float size =0.1;
+glsl vec4 myshader(vec2 position,float time)
+{
+    float d = distance(position,vec2(0.5,0.5));
+    float currentSize = size + 0.1*sin(4.0*time);
+    if (d < currentSize)
+        return ORANGE;
+    else
+        return TRANSPARENT;
+}
+
+animation Myimage = glsl(myshader,256,256);

@@ -1,0 +1,75 @@
+// first try for a heightmap
+
+#include <math_constants>
+#include <affine_transform>
+#include <lighting>
+#include <heightmap>
+
+//heightmap resolution
+parameter int SIDE = 256: logrange(2,4096);
+//scale of height component
+parameter float heightScale = 0.25;
+//rotation
+parameter vec2 rotation = vec2(0.0,0.5) : range(-PI,+PI);
+// distance between camara and heightmap
+parameter float distance = 2.0 : range(16.0);
+// FOV
+parameter float FOV = 0.5*PI : range(0.0, PI);
+// min and max drawdistance
+const float NEAR = 1.0/256, FAR = 256.0;
+//incoming light
+const vec3 lightDirection = vec3(0.0,0.0,-1.0);
+
+//input texture
+image HeightMap = file();
+//if you want to use a diffrent texturefor color change this
+#define Texture HeightMap
+
+//passing fragment data from vertex shader to the fragment shader
+glsl struct FragmentData
+{
+	vec2 texCoord;
+	vec3 normal;
+};
+
+//the height function
+glsl float heightFn(vec2 pos)
+{
+	vec3 s = texture(HeightMap, pos).rgb;
+	return heightScale/3.0*(s.r+s.g+s.b);
+}
+
+//the vertex shader
+glsl vec4 vertexShader(out FragmentData f,int index)
+{
+	// Acquire vertex coordinate, texture coordinate, and normal vector
+	vec3 coord = heightmapCoord<heightFn, SIDE, SIDE>(index);
+	f.texCoord = heightmapTexCoord<heightFn,SIDE,SIDE>(index);
+	f.normal = heightmapNormal<heightFn,SIDE,SIDE>(index);
+
+    // Transform coordinate
+    coord = translate(coord, vec3(-0.5, -0.5, 0.0));
+    coord = rotateZ(coord, rotation.x);
+    coord = rotateX(coord, -0.5*PI+rotation.y);
+    coord = translate(coord, vec3(0.0, 0.0, -distance));
+
+    // Transform normal
+    f.normal = rotateZ(f.normal, rotation.x);
+    f.normal = rotateX(f.normal, -0.5*PI+rotation.y);
+
+    // Perspective projection
+    return projectPerspectiveHFOV(coord, FOV, NEAR, FAR);
+}
+
+//fragment shader
+glsl vec4 fragmentShader(in FragmentData f)
+{
+	float lightness = mix(1.0,diffuseLight(lightDirection,f.normal),0.75);
+	return lightness*texture(Texture, f.texCoord);
+}
+//heightmap model defenition
+model Terrain :
+	fragment_data(FragmentData),
+	vertex(vertexShader, triangles, HEIGHTMAP_VERTEX_COUNT(SIDE,SIDE)),
+	fragment(fragmentShader),
+	multisample(4);

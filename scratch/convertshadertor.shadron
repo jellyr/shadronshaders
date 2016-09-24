@@ -1,0 +1,61 @@
+const int iterations=100;
+ glsl mainimage(out vec4 fragColor, in vec2 fragCoord)
+ {
+    //this takes the pixel we are working with to determine where it is on the screen
+    vec2 z = gl_FragCoord.xy ;
+ 	vec2 uv = gl_FragCoord.xy;
+    vec4 source = texture2D( iChannel0, uv ); //texture probebly
+    //fixes aspect ratio in favor of symmety. comment it and see what it looks like
+    //z.y*=iResolution.y/iResolution.x;
+    //gloobywavez
+	//z.x += sin(z.y*2.0+iGlobalTime * .5)/10.0;
+	//zooom
+	//z*= 1.2 + sin(iGlobalTime*.15);
+ 
+  	//pan
+  	//z+=vec2(sin(iGlobalTime*.2),cos(iGlobalTime*.01));
+ 
+	//rotate
+	//z=vec2(z.x*cos(iGlobalTime*.2)- z.y*sin(iGlobalTime*.2),z.y*cos(iGlobalTime*.2)+ z.x*sin(iGlobalTime*.2));
+		
+	vec2 c=vec2(0.5, 1.1);
+    
+    float average=15.;
+	float l=length(z);
+	float prevl;
+	for (int i=0; i<iterations; i++)
+		{
+    		//kaliset base form
+    		z=abs(z)/dot(z,z) -c;
+ 
+    		//this is another function that can be iterated to produce some different fractals
+    		//comment out the previous kaliset and experiment with values with this one!!
+    		//z = abs(z)/(z.x*z.y)-c;
+ 
+    		prevl=l;
+    		l=length(z);
+ 
+    		average+=abs(l-prevl); // WTF does prevl do ?
+		}
+ 
+	//get the average length based upon the amount of iterations elapsed. multiply it to adjust "definition"
+	average/=float(iterations) * 15.;//change the 1 to change the pattern
+    //clamp(average/=float(iterations),0.99,1.0);
+    //color fluctuation
+    average+=iGlobalTime*0.03;//speeds up the color changes :D
+ 
+    vec3 myColor=vec3(0.05,0.21,.62);
+    vec4 finalColor;
+ 
+    //set the colors!
+    finalColor.r = 1.0;//(fract(float(average)/myColor.r)); //randomizes color on red channel
+    finalColor.g = (fract(float(average)/myColor.g)); //randomizes color on green channel
+    finalColor.b = (fract(float(average)/myColor.b));//randomizes color on blue channel
+ 	finalColor.a = 1.0;
+    //fragColor = vec4(finalColor,0.0);
+    //fragColor = (mix(source,finalColor,0.5));
+   vec4 merge = mix(source,finalColor,0.7); //MIX ONLY TAKES 2 OF THE SAME VECS SO IF 1 is a vec4 the other must be a vec4 aswell
+   return merge;
+ }
+       
+   

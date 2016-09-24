@@ -1,0 +1,92 @@
+#include <perlin>
+#include <worley>
+#include <hsv>
+#include <utility>
+//utility author : Demod,2016
+param vec2 location = vec2(400,200) : range(vec2(0,0),vec2(1080,1080));
+param vec2 size = vec2(128,128) : range(vec2(-500,-500),vec2(500,500));
+param vec2 anchor = vec2(CENTER,CENTER) : range(vec2(LEFT,BOTTOM),vec2(RIGHT,TOP));
+
+image MyText = text("Works Fine", "Arial", regular, 40, center, ivec2(200, 40));
+image background = file();
+
+
+// This example showcases the two noise functions, Perlin and Worley
+// Author: Viktor Chlumsky, 2016
+// Noise function implementation by Ian McEwan and Stefan Gustavson
+
+
+
+// Size of the image
+const int SIZE = 4096;
+// Number of iteration in the fractal noise computation
+const int FRACTAL_STEPS = 8;
+// Scale of the noise
+parameter float scale_fractal = 8.0 : logrange(1.0, 64.0);
+
+// Basic perlin noise rescaled from (-1, +1) to (0, 1)
+glsl float basicPerlin(vec2 pos) {
+    float p = perlinNoise(scale_fractal*pos);
+    return 0.5 + 0.5*p;
+}
+
+// Basic Worley noise, projected as F2-F1 (second lowest distance - lowest distance to Voronoi site)
+glsl float basicWorley(vec2 pos) {
+    vec2 w = worleyNoise(scale_fractal*pos);
+    return w.y-w.x;
+}
+
+// A template that samples FN at different scales and adds them together - the fractal noise
+template <FN, STEPS>
+glsl float fractal(vec2 pos) {
+    float total = 0.0;
+    float factor = 1.0;
+    for (int i = 0; i < STEPS; ++i) {
+        factor *= 0.5;
+        total += factor*FN(pos-vec2(i));
+        pos *= 2.0;
+    }
+    return total;
+}
+
+// Noise images get rid of these when not running trough shadron 
+//image BasicPerlinNoise = glsl(basicPerlin, ivec2(SIZE));
+//image BasicWorleyNoise = glsl(basicWorley, ivec2(SIZE));
+image FractalPerlinNoise = glsl(fractal<basicPerlin, FRACTAL_STEPS>, ivec2(SIZE));
+image FractalWorleyNoise = glsl(fractal<basicWorley, FRACTAL_STEPS>, ivec2(SIZE));
+
+
+
+glsl vec4 sampleMyAnimationFrame(vec2 pos, float time)
+    {
+    vec2 pos_px = pos;
+    pos_px.x += sin(pos.y*2.0+time * .5)/25.0;//messing with the pos.x 
+    pos_px.y +=sin(pos.x*1.0+time*.5)/25;//messsing with the pos.y
+    vec4 text = texture(MyText, pos);//text
+ 
+    vec4 background = texture(background, pos);//background image
+    //instead of calling the texture , call the generation directly and store in a float
+    float perlin = fractal<basicWorley, FRACTAL_STEPS>(pos_px);//call the generation and store in in here
+    //grab the float stored data, map it to r,g,b channels set alpha to 1
+    vec4 perlintex = vec4(perlin,perlin,perlin,1);//call it and make it ready :Perlin
+  
+    perlintex.a=0.2;//alpha channel for fractal thing
+    vec4 bg_perlin = mix(background,perlintex,perlintex.a);//mix background picture and fractal , giving it the alpha channel of the fractal
+    bg_perlin = layer(bg_perlin,varSprite<masked<MyText,texColor<vec4(1.0,0.0,0.0,0.8)>>>(pos,location,size,anchor));//moves 
+    
+    //vec4 final = mix(bg_perlin,col,0.3);//mixing the results
+    vec4 final = bg_perlin;
+    //float r = length(pos);
+    float h = hue(final); // gets hue
+    float s = saturation(final); //gets saturation
+    float v = value(final); //gets value
+    h = h + shadron_Time/10; // increase hue by using the shadron timer
+   if (h < 0.0) // make sure the hue doesnt get too low or to high
+        h = h +1 ;
+    else if (h > 1.0)
+       h = h- 1;
+    return vec4(bg_perlin);
+    }
+
+    animation MyAnimation = glsl (sampleMyAnimationFrame,512,512);
+    export png_sequence(MyAnimation,"test?.png", 10, 10);
