@@ -6,9 +6,9 @@
 #include <heightmap>
 
 //heightmap resolution
-parameter int SIDE = 256: logrange(2,4096);
-//scale of height component
-parameter float heightScale = 0.25;
+parameter int SIDE = 1024: logrange(1,8192);
+//scale of height  effects how strong the effect is
+parameter float heightScale = 1.0;
 //rotation
 parameter vec2 rotation = vec2(0.0,0.5) : range(-PI,+PI);
 // distance between camara and heightmap
@@ -16,9 +16,9 @@ parameter float distance = 2.0 : range(16.0);
 // FOV
 parameter float FOV = 0.5*PI : range(0.0, PI);
 // min and max drawdistance
-const float NEAR = 1.0/256, FAR = 256.0;
+const float NEAR = 1.0/512, FAR = 512.0;
 //incoming light
-const vec3 lightDirection = vec3(0.0,0.0,-1.0);
+const vec3 lightDirection = vec3(1.0,1.0,1.0);
 
 //input texture
 image HeightMap = file();
@@ -68,8 +68,18 @@ glsl vec4 fragmentShader(in FragmentData f)
 	return lightness*texture(Texture, f.texCoord);
 }
 //heightmap model defenition
-model Terrain :
+model image Terrain :
 	fragment_data(FragmentData),
 	vertex(vertexShader, triangles, HEIGHTMAP_VERTEX_COUNT(SIDE,SIDE)),
 	fragment(fragmentShader),
-	multisample(4);
+	multisample(4),
+	dimensions(640,480);
+
+	//heightmap model defenition
+ model Terrainmod :
+	fragment_data(FragmentData),
+	vertex(vertexShader, triangles, HEIGHTMAP_VERTEX_COUNT(SIDE,SIDE)),
+	fragment(fragmentShader);
+	//multisample(4);
+	
+	export png(Terrain,"terrain,png");

@@ -20,7 +20,7 @@ const vec3 lightDirection = vec3(0.0, 0.0, -1.0);
 // Size of the image
 const int SIZE = 4096;
 // Number of iteration in the fractal noise computation
-const int FRACTAL_STEPS = 16;
+const int FRACTAL_STEPS = 32;
 // Scale of the noise
 parameter float scale_fractal = 8.0 : logrange(1.0, 64.0);
 image MyText = text("cube", "Arial", regular, 40, center, ivec2(200, 40));
