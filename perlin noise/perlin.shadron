@@ -84,3 +84,4 @@ glsl vec4 sampleMyAnimationFrame(vec2 pos, float time)
 
     animation MyAnimation = glsl (sampleMyAnimationFrame,512,512);
     export png_sequence(MyAnimation,"test?.png", 10, 10);
+    export png(FractalWorleyNoise,"hello.png");

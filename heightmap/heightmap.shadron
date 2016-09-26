@@ -1,5 +1,6 @@
 // first try for a heightmap
-
+#include <perlin>
+#include <worley>
 #include <math_constants>
 #include <affine_transform>
 #include <lighting>
@@ -18,12 +19,37 @@ parameter float FOV = 0.5*PI : range(0.0, PI);
 // min and max drawdistance
 const float NEAR = 1.0/512, FAR = 512.0;
 //incoming light
-const vec3 lightDirection = vec3(1.0,1.0,1.0);
+const vec3 lightDirection = vec3(-1.0,-1.0,-1.0);
+// Size of the image
+const int SIZE = 4096;
+// Number of iteration in the fractal noise computation
+const int FRACTAL_STEPS = 3;
+// Scale of the noise
+const float scale_fractal = 20.0;
 
 //input texture
 image HeightMap = file();
 //if you want to use a diffrent texturefor color change this
-#define Texture HeightMap
+#define Texture FractalWorleyNoise
+
+// Basic Worley noise, projected as F2-F1 (second lowest distance - lowest distance to Voronoi site)
+glsl float basicWorley(vec2 pos) {
+    vec2 w = worleyNoise(scale_fractal*pos);
+    return w.y-w.x;
+}
+
+// A template that samples FN at different scales and adds them together - the fractal noise
+template <FN, STEPS>
+glsl float fractal(vec2 pos) {
+    float total = 0.0;
+    float factor = 1.0;
+    for (int i = 0; i < STEPS; ++i) {
+        factor *= 0.5;
+        total += factor*FN(pos-vec2(i));
+        pos *= 2.0;
+    }
+    return total;
+}
 
 //passing fragment data from vertex shader to the fragment shader
 glsl struct FragmentData
@@ -60,7 +86,8 @@ glsl vec4 vertexShader(out FragmentData f,int index)
     // Perspective projection
     return projectPerspectiveHFOV(coord, FOV, NEAR, FAR);
 }
-
+image FractalWorleyNoise = glsl(fractal<basicWorley, FRACTAL_STEPS>, ivec2(SIZE));
+image BasicWorleyNoise = glsl(basicWorley, ivec2(SIZE));
 //fragment shader
 glsl vec4 fragmentShader(in FragmentData f)
 {
