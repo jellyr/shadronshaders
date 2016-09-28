@@ -42,7 +42,7 @@ glsl float basicWorley(vec2 pos) {
 template <FN, STEPS>
 glsl float fractal(vec2 pos) {
     float total = 0.0;
-    float factor = 1.0;
+    float factor = 1.8;
     for (int i = 0; i < STEPS; ++i) {
         factor *= 0.5;
         total += factor*FN(pos-vec2(i));

@@ -1,0 +1,59 @@
+#include <perlin>
+#include <worley>
+#include <math_constants>
+//param vec2 location = vec2(400,200) : range(vec2(0,0),vec2(1080,1080));
+//param vec2 size = vec2(128,128) : range(vec2(-500,-500),vec2(500,500));
+//param vec2 anchor = vec2(CENTER,CENTER) : range(vec2(LEFT,BOTTOM),vec2(RIGHT,TOP));
+
+
+
+// Size of the image
+const int SIZE = 4096;
+// Number of iteration in the fractal noise computation
+const int FRACTAL_STEPS = 8;
+// Scale of the noise
+parameter float scale_fractal = 8.0 : logrange(1.0, 64.0);
+
+// Basic perlin noise rescaled from (-1, +1) to (0, 1)
+glsl float basicPerlin(vec2 pos) {
+    float p = perlinNoise(scale_fractal*pos);
+    return 0.5 + 0.5*p;
+}
+
+// Basic Worley noise, projected as F2-F1 (second lowest distance - lowest distance to Voronoi site)
+glsl float basicWorley(vec2 pos) {
+    vec2 w = worleyNoise(scale_fractal*pos);
+    return w.y-w.x;
+}
+
+// A template that samples FN at different scales and adds them together - the fractal noise
+template <FN, STEPS>
+glsl float fractal(vec2 pos) {
+    float total = 0.0;
+    float factor = 1.0;
+    for (int i = 0; i < STEPS; ++i) {
+        factor *= 0.5;
+        total += factor*FN(pos-vec2(i));
+        pos *= 2.0;
+    }
+    return total;
+}
+
+// Noise images get rid of these when not running trough shadron 
+image BasicPerlinNoise = glsl(basicPerlin, ivec2(SIZE));
+//image BasicWorleyNoise = glsl(basicWorley, ivec2(SIZE));
+//image FractalPerlinNoise = glsl(fractal<basicPerlin, FRACTAL_STEPS>, ivec2(SIZE));
+//image FractalWorleyNoise = glsl(fractal<basicWorley, FRACTAL_STEPS>, ivec2(SIZE));
+cubemap InputCubemap = file();
+const float gridDensity = 8.0;
+const int resolution = 1024;
+glsl vec4 cubemapShader(vec3 direction) {
+    // Convert to polar coordinates
+    vec2 polar = vec2(atan(direction.z, direction.x), acos(direction.y));
+    // Determine square color and return it
+    float grid = float((mod(gridDensity/TAU*polar.x, 1.0) >= 0.5) == (mod(gridDensity/TAU*polar.y, 1.0) >= 0.5));
+    vec3 color = mix(vec3(0.25), vec3(0.75), grid);
+    return vec4(color, 1.0);
+}
+
+cubemap MyCubemap = glsl(cubemapShader, resolution);
