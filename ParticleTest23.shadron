@@ -1,0 +1,31 @@
+#include <math_constants>
+#include <hsv>
+
+const ivec2 PARTICLE_GRID = ivec2(1000,1000);
+const int PARTICLE_COUNT = PARTICLE_GRID.x*PARTICLE_GRID.y;
+
+param vec2 GravityWell = vec2(0,0) : range(vec2(-1,-1),vec2(1,1));
+param float TimeFactor = 1 : logrange(0.01,100);
+param float TimeRange = 10 : logrange(1,100);
+
+glsl struct FragData {
+    vec2 ip;
+};
+glsl vec4 ParticleRenderVert(out FragData fd, int index, float time) {
+    vec2 c = vec2(index%PARTICLE_GRID.x,index/PARTICLE_GRID.x);
+    fd.ip = 2*(c/PARTICLE_GRID)-vec2(1,1);
+    vec2 delta = fd.ip - GravityWell;
+    float radius = length(delta);
+    float t = TimeRange*sin((PI/2)*(TimeFactor*time)/TimeRange);
+    float theta = atan(delta.y,delta.x)+(t / (pow(radius,3)));
+    return vec4(GravityWell+radius*vec2(cos(theta),sin(theta)),0,1);
+}
+glsl vec4 ParticleRenderFrag(in FragData fd, float time) {
+    float vis = length(fd.ip)+0.2;
+    return vec4(hsv(atan(fd.ip.y,fd.ip.x)/TAU,vis,vis),1);
+}
+model animation ParticleRender : 
+    fragment_data(FragData),
+    vertex_animated(ParticleRenderVert,points,PARTICLE_COUNT),
+    fragment_animated(ParticleRenderFrag),
+    dimensions(512,512);

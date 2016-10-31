@@ -1,0 +1,100 @@
+#version 140
+
+#include <math_constants>
+#include <affine_transform>
+#include <heightmap>
+
+#include "ModelUtils.shadron"
+
+const int SIZE = 64;
+
+param float CameraDistance = 1 : logrange(0.1,10);
+param vec2 CameraAngle = vec2(PI/4,PI/4) : range(vec2(-PI,-PI/2),vec2(PI,PI/2));
+
+param vec3 Rotate = vec3(0,0,0) : range(vec3(-PI,-PI,-PI),vec3(PI,PI,PI));
+
+glsl struct FragData {
+	vec3 objectPos;
+	vec3 objectNormal;
+	vec3 worldPos;
+	vec3 worldNormal;
+	vec4 screenPos;
+};
+
+glsl vec4 paramOrthoSphereCamera(vec3 vertex) {
+	vec3 camSpace = cameraSphereView(vertex,vec3(0,0,0),CameraDistance,CameraAngle.x,-CameraAngle.y);
+	return projectOrthographic(camSpace,2*vec2(CameraDistance,CameraDistance), -1000, 1000);
+}
+
+glsl float HeightMapTestGen(vec2 pos) {
+	return min(max(pos.x,pos.y)-0.5,0.5-max(pos.x,pos.y));
+}
+glsl vec4 HeightMapTestVert(out FragData fragData, int vertexIndex) {
+	Vertex object = Vertex(heightmapCoord<HeightMapTestGen,SIZE,SIZE>(vertexIndex),
+						heightmapNormal<HeightMapTestGen,SIZE,SIZE>(vertexIndex));
+	fragData.objectPos = object.pos;
+	fragData.objectNormal = object.normal;
+
+	Vertex world = transform(object,vec3(0.5,-0.25,-0.5),vec3(PI/2,0,0),vec3(1,1,1));
+	world = transform(world,vec3(0,0,0),Rotate,vec3(1,1,1));
+	fragData.worldPos = world.pos;
+	fragData.worldNormal = world.normal;
+	
+	fragData.screenPos = paramOrthoSphereCamera(world.pos);
+	return fragData.screenPos;
+}
+glsl vec4 HeightMapTestFrag(in FragData fragData) {
+	//float f = fragData.objectPos.z + 0.5;
+	//float f = fragData.screenPos.y/2+0.5;
+	//return vec4(f,f,f,1);
+	return vec4(fragData.worldNormal,1);
+}
+model HeightMapTest : 
+	fragment_data(FragData), 
+	vertex(HeightMapTestVert,triangles,HEIGHTMAP_VERTEX_COUNT(SIZE,SIZE)), 
+	fragment(HeightMapTestFrag);
+
+glsl {
+	vec3[] SCREEN_POINTS = vec3[](
+		vec3(1,0,0),
+		vec3(0,1,0),
+		vec3(0,0,1),
+		vec3(-1,0,0),
+		vec3(0,-1,0),
+		vec3(0,0,-1)
+	);
+	vec4[] SCREEN_POINT_COLORS = vec4[](
+		vec4(1,0,0,1),
+		vec4(0,1,0,1),
+		vec4(0,0,1,1),
+		vec4(0.5,0,0,1),
+		vec4(0,0.5,0,1),
+		vec4(0,0,0.5,1)
+	);
+}
+glsl struct ScreenPointTextFragData {
+	vec4 color;
+	vec3 pos;
+};
+glsl vec4 ScreenPointTestVert(out ScreenPointTextFragData fragData, int vertexIndex) {
+	vec3 vertex;
+	int pointIndex = vertexIndex/2;
+	fragData.color = SCREEN_POINT_COLORS[pointIndex];
+	vertex = SCREEN_POINTS[pointIndex];
+
+	if (vertexIndex % 2 == 0) {
+		//fragData.color  = vec4(vec3(1,1,1)-fragData.rgb,1);
+		vertex = vec3(0,0,0);
+	}
+
+	fragData.pos = vertex;
+
+	return paramOrthoSphereCamera(vertex);
+}
+glsl vec4 ScreenPointTestFrag(in ScreenPointTextFragData fragData) {
+	return fragData.color;
+}
+model ScreenPointTest : 
+	fragment_data(ScreenPointTextFragData),
+	vertex(ScreenPointTestVert,lines,6*2),
+	fragment(ScreenPointTestFrag);

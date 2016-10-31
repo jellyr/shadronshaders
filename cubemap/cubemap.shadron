@@ -57,3 +57,4 @@ glsl vec4 cubemapShader(vec3 direction) {
 }
 
 cubemap MyCubemap = glsl(cubemapShader, resolution);
+

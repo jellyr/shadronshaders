@@ -1,0 +1,110 @@
+#version 140
+
+#include <perlin>
+#include <worley>
+#include <math_constants>
+#include <affine_transform>
+#include <lighting>
+#include <heightmap>
+
+#include "ModelUtils.shadron"
+
+param float CameraDistance = 1 : logrange(0.1,10);
+param vec2 CameraAngle = vec2(PI/4,PI/4) : range(vec2(-PI,-PI/2),vec2(PI,PI/2));
+
+param vec3 Translate = vec3(0,0.5,0) : range(vec3(-1,-1,-1),vec3(1,1,1));
+param vec3 Rotate = vec3(0,0,0) : range(vec3(-PI,-PI,-PI),vec3(PI,PI,PI));
+param vec3 Scale = vec3(1,1,1) : logrange(vec3(0.1,0.1,0.1),vec3(10,10,10));
+
+//heightmap resolution
+parameter int SIDE = 1024: logrange(1,8192);
+//scale of height  effects how strong the effect is
+parameter float heightScale = 0.5 : range(0,1);
+//incoming light
+const vec3 lightDirection = vec3(-1.0,-1.0,-1.0);
+// Size of the image
+const int IMAGESIZE = 4096;
+// Number of iteration in the fractal noise computation
+param int FRACTAL_STEPS = 3 : range(0.0,60);
+// Scale of the noise
+param float scale_fractal = 20.0 : range(0.0,20.0);
+
+//input texture
+//image HeightMap = file();
+//if you want to use a diffrent texturefor color change this
+//#define Texture HeightMap
+
+// Basic Worley noise, projected as F2-F1 (second lowest distance - lowest distance to Voronoi site)
+glsl float basicWorley(vec2 pos) {
+    vec2 w = worleyNoise(scale_fractal*pos);
+    return w.y-w.x;
+}
+
+// A template that samples FN at different scales and adds them together - the fractal noise
+template <FN, STEPS>
+glsl float fractal(vec2 pos) {
+    float total = 0.0;
+    float factor = 1.8;
+    for (int i = 0; i < STEPS; ++i) {
+        factor *= 0.5;
+        total += factor*FN(pos-vec2(i));
+        pos *= 2.0;
+    }
+    return total;
+}
+image FractalWorleyNoise = glsl(fractal<basicWorley, FRACTAL_STEPS>, ivec2(IMAGESIZE));
+image BasicWorleyNoise = glsl(basicWorley, ivec2(IMAGESIZE));
+//input texture
+image HeightMap = file();
+//if you want to use a diffrent texturefor color change this
+#define Texture FractalWorleyNoise
+//passing fragment data from vertex shader to the fragment shader
+glsl struct FragmentData
+{
+	vec2 texCoord;
+	vec3 normal;
+};
+
+glsl vec4 paramOrthoSphereCamera(vec3 vertex) // does camara stuff
+ {
+	vec3 camSpace = cameraSphereView(vertex,/*Camera*/vec3(0,0,0),CameraDistance,CameraAngle.x,-CameraAngle.y); //outputs an item called camarasphereview 
+	return projectOrthographic(camSpace,2*vec2(CameraDistance,CameraDistance), -1000, 1000); // uses the functionabove aswell as camara distance twice and returns it
+}
+
+//the height function
+glsl float heightFn(vec2 pos)
+{
+	vec3 s = texture(Texture, pos).rgb;
+	return heightScale/3.0*(s.r+s.g+s.b);
+}
+
+//the vertex shader
+glsl vec4 vertexShader(out FragmentData f,int index)
+{
+	Vertex object = Vertex(heightmapCoord<heightFn,SIDE,SIDE>(index),
+						heightmapNormal<heightFn,SIDE,SIDE>(index)); //transforms heightmap into vertextes
+	f.texCoord = heightmapTexCoord<heightFn,SIDE,SIDE>(index);
+
+	Vertex world = transform(object,vec3(0.5,0,-0.5),vec3(PI/2,0,0),vec3(1,1,1));
+	world = transform(world,Translate,Rotate,Scale);
+	f.normal = world.normal;
+
+	vec4 screenPos = paramOrthoSphereCamera(world.pos);
+	return screenPos;
+}
+
+//fragment shader
+glsl vec4 fragmentShader(in FragmentData f)
+{
+	float lightness = mix(1.0,diffuseLight(lightDirection,f.normal),0.75);
+	return lightness*texture(Texture, f.texCoord);
+}
+//heightmap model defenition
+model image Terrain :
+	fragment_data(FragmentData),
+	vertex(vertexShader, triangles, HEIGHTMAP_VERTEX_COUNT(SIDE,SIDE)),
+	fragment(fragmentShader),
+	multisample(16),
+	dimensions(1280,720);
+	
+	export png(Terrain,"terrain,png");

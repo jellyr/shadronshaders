@@ -1,0 +1,79 @@
+#include <math_constants>
+#include <hsv>
+
+const ivec2 PARTICLE_GRID = ivec2(1000,1000);
+const int PARTICLE_COUNT = PARTICLE_GRID.x*PARTICLE_GRID.y;
+
+const vec2 PIXEL_SIZE = vec2(1280,1280);
+const vec2 PIXEL_CENTER = PIXEL_SIZE/2;
+
+param vec2 GravityWell = PIXEL_CENTER : range(vec2(0,0),PIXEL_SIZE);
+
+glsl vec4 ParticleDataInit(vec2 pos) {
+    vec2 p = pos * PIXEL_SIZE;
+    vec2 v = vec2(0,0);
+    return vec4(p,v);
+}
+glsl vec4 ParticleDataSimulate(sampler2D self, vec2 pos, float seconds) {
+    vec4 data = texture(self,pos);
+    vec2 p = data.xy;
+    vec2 v = data.zw;
+
+    //Accelerate around Gravity Well
+    float distance = distance(p,GravityWell);
+    float power = 80;
+    vec2 u = vec2((GravityWell.x - p.x) / distance,(GravityWell.y - p.y) / distance);
+    vec2 t = vec2(u.y,-u.x);
+    vec2 a = power * (u + t*0.25);
+
+    //Bounce off boundaries
+    float bounceDampening = 0.5;
+    if (p.x < 0) {
+        p.x = -p.x;
+        v.x = abs(v.x) * bounceDampening;
+    }
+    if (p.y < 0) {
+        p.y = -p.y;
+        v.y = abs(v.y) * bounceDampening;
+    }
+    if (p.x > PIXEL_SIZE.x) {
+        p.x = PIXEL_SIZE.x - (p.x - PIXEL_SIZE.x);
+        v.x = -abs(v.x) * bounceDampening;
+    }
+    if (p.y > PIXEL_SIZE.y) {
+        p.y = PIXEL_SIZE.y - (p.y - PIXEL_SIZE.y);
+        v.y = -abs(v.y) * bounceDampening;
+    }
+
+    //Simulate Physics
+    p += a/2*seconds*seconds + v*seconds;
+    v += a*seconds;
+    
+    data.xy = p;
+    data.zw = v;
+    return data;
+}
+feedback ParticleData = glsl(ParticleDataSimulate, PARTICLE_GRID) : 
+    initialize(ParticleDataInit), 
+    full_range(true), 
+    filter(none);
+
+glsl struct FragData {
+    vec2 p;
+    vec2 v;
+};
+glsl vec4 ParticleRenderVert(out FragData fd, int index, float time) {
+    vec2 coord = vec2(0.5,0.5)+vec2(index % PARTICLE_GRID.x,index / PARTICLE_GRID.x);
+    vec4 data = texture(ParticleData,coord/PARTICLE_GRID);
+    fd.p = data.xy;
+    fd.v = data.zw;
+    return vec4((fd.p/PIXEL_SIZE)*2-vec2(1,1),max(-1,-length(fd.v)/200),1);
+}
+glsl vec4 ParticleRenderFrag(in FragData fd, float time) {
+    return vec4(hsv(atan(fd.v.y,fd.v.x)/TAU,1,1),length(fd.v)/200);
+}
+model animation ParticleRender : 
+    fragment_data(FragData),
+    vertex_animated(ParticleRenderVert,points,PARTICLE_COUNT),
+    fragment_animated(ParticleRenderFrag),
+    dimensions(512,512);

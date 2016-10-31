@@ -1,0 +1,69 @@
+#version 140
+
+#include <affine_transform>
+#include <math_constants>
+
+#include "ModelUtils.shadron"
+
+param int Quality = 1 : range(1,3);
+param float Zoom = 1 : logrange(0.01,1);
+param float Longitude = 0 : range(-180,180);
+param float Latitude = 0 : range(-90,90);
+param float Pan = 0 : range(-90,90);
+param float Tilt = 0 : range(-89.9999,89.9999);
+param float HeightScalar = 0.025 : logrange(0.001,0.1);
+
+#define SIDE int(pow(2,8+Quality))
+
+glsl struct FragData {
+	vec3 dir;
+	vec3 pos;
+	vec4 screen;
+};
+
+glsl vec4 paramOrthoSphereCamera(vec3 vertex) {
+	vec2 cameraRotate = vec2(PI*Pan/180,PI*Tilt/180);
+	vec3 camSpace = cameraSphereView(vertex,vec3(-(1-HeightScalar),0,0),1,-cameraRotate.x,-cameraRotate.y);
+	return projectOrthographic(camSpace,2*vec2(Zoom,Zoom), -2, 2)
+			 * vec4(shadron_Dimensions.x/shadron_Dimensions.y,1,1,1);
+}
+
+image HeightSampler = file("height.png");
+image ColorSampler = file("color.png");
+
+glsl vec2 equirectangularCoord(vec3 dir) {
+	return mod(vec2(atan(dir.z,dir.x)/TAU,(acos(-dir.y)/PI)),1);
+}
+
+glsl float HeightMap(vec3 dir) {
+	float f = texture(HeightSampler,equirectangularCoord(dir)).x;
+	return f*HeightScalar+(1-HeightScalar);
+}
+glsl vec4 SphereVert(out FragData f, int index) {
+	vec2 objectRotate = vec2(PI*Longitude/180,PI*Latitude/180);
+	
+	f.dir = spheremapDir<SIDE>(index);
+	f.pos = spheremapVertex<HeightMap,SIDE>(index);
+	f.screen = paramOrthoSphereCamera(rotateZ(rotateY(f.pos,objectRotate.x),objectRotate.y));
+	return f.screen;
+}
+glsl vec4 SphereFrag(in FragData f) {
+	vec2 objectRotate = vec2(PI*Longitude/180,PI*Latitude/180);
+	
+	vec4 col = texture(ColorSampler,equirectangularCoord(f.dir));
+	
+	float fog = (f.screen.z+1)/1.5;
+	fog = fog * fog;
+	col = mix(col,vec4(0.7,0.7,0.7,1),fog);
+
+	vec3 target = rotateY(rotateZ(vec3(-1,0,0),-objectRotate.y),-objectRotate.x);
+	if (abs(distance(target,f.dir)-(Zoom/30)) < 0.005*Zoom) {
+		col = mix(col,vec4(1,1,1,1),0.5);
+	}
+
+	return col;
+}
+model Sphere : 
+	fragment_data(FragData),
+	vertex(SphereVert,triangles,SPHEREMAP_VERTEX_COUNT(SIDE)), 
+	fragment(SphereFrag);

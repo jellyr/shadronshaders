@@ -1,0 +1,132 @@
+#version 140
+
+#include <math_constants>
+#include <affine_transform>
+#include <heightmap>
+
+const int SIZE = 64;
+
+//param vec3 Camera = vec3(0,0,0) : range(vec3(-1,-1,-1),vec3(1,1,1));
+param float CameraDistance = 1 : logrange(0.1,10);
+param vec2 CameraAngle = vec2(PI/4,PI/4) : range(vec2(-PI,-PI/2),vec2(PI,PI/2));
+//param vec3 ScreenPointTestPoint = vec3(1,1,1) : range(vec3(-1,-1,-1),vec3(1,1,1));
+
+glsl struct FragData {
+	vec3 objectPos;
+	vec3 objectNormal;
+	vec3 worldPos;
+	vec4 screenPos;
+	//Biome?
+	//Normal?
+	//3D Pos?
+};
+
+//Stolen from https://github.com/stackgl/glsl-look-at/blob/gh-pages/index.glsl
+//glsl method
+glsl vec3 cameraLookView(vec3 vertex, vec3 position, vec3 lookAt) {
+	vec3 rr = vec3(0,1,0);
+	vec3 ww = normalize(lookAt-position);
+	vec3 uu = normalize(cross(ww,rr));
+	vec3 vv = normalize(cross(uu,ww));
+	return inverse(mat3(uu,vv,ww))*(vertex-position);
+}
+
+//glsl method
+glsl vec3 cameraSphereView(vec3 vertex, vec3 lookAt, float distance, float theta, float phi) {
+	vec3 position = lookAt + distance * rotateY(rotateZ(vec3(1,0,0),phi),theta);
+	return cameraLookView(vertex, position, lookAt);
+}
+
+template<TRANSLATE,ROTATE,SCALE>
+//glsl method
+glsl vec3 transform(vec3 vertex) {
+	return varTransform(vertex,TRANSLATE,ROTATE,SCALE);
+}
+//glsl method
+glsl vec3 varTransform(vec3 vertex, vec3 translate, vec3 rotate, vec3 scale) {
+	return -translate + scale * rotateZ(rotateY(rotateX(vertex,-rotate.x),-rotate.y),-rotate.z);
+}
+//glsl method 
+glsl vec4 paramOrthoSphereCamera(vec3 vertex) {
+	vec3 camSpace = cameraSphereView(vertex,/*Camera*/vec3(0,0,0),CameraDistance,CameraAngle.x,-CameraAngle.y);
+	return projectOrthographic(camSpace,2*vec2(CameraDistance,CameraDistance), -1000, 1000);
+}
+
+glsl float HeightMapTestGen(vec2 pos) {
+	return min(max(pos.x,pos.y)-0.5,0.5-max(pos.x,pos.y));
+}
+glsl vec4 HeightMapTestVert(out FragData fragData, int vertexIndex) {
+	fragData.objectPos = heightmapCoord<HeightMapTestGen,SIZE,SIZE>(vertexIndex);
+
+	fragData.worldPos = transform<vec3(0.5,-0.25,-0.5),vec3(PI/2,0,0),vec3(1,1,1)>(fragData.objectPos);
+
+	fragData.screenPos = paramOrthoSphereCamera(fragData.worldPos);
+	return fragData.screenPos;
+}
+glsl vec4 HeightMapTestFrag(in FragData fragData) {
+	float f = fragData.objectPos.z + 0.5;
+	return vec4(f,f,f,1);
+}
+//model HeightMapTest : 
+//	fragment_data(FragData), 
+//	vertex(HeightMapTestVert,triangles,HEIGHTMAP_VERTEX_COUNT(SIZE,SIZE)), 
+//	fragment(HeightMapTestFrag);
+
+/*glsl {
+	vec3[] SCREEN_POINTS = vec3[](
+		vec3(1,0,0),
+		vec3(0,1,0),
+		vec3(0,0,1),
+		vec3(-1,0,0),
+		vec3(0,-1,0),
+		vec3(0,0,-1)
+	);
+	vec4[] SCREEN_POINT_COLORS = vec4[](
+		vec4(1,0,0,1),
+		vec4(0,1,0,1),
+		vec4(0,0,1,1),
+		vec4(0.5,0,0,1),
+		vec4(0,0.5,0,1),
+		vec4(0,0,0.5,1)
+	);
+}
+glsl struct ScreenPointTextFragData {
+	vec4 color;
+	vec3 pos;
+};
+glsl vec4 ScreenPointTestVert(out ScreenPointTextFragData fragData, int vertexIndex) {
+	vec3 vertex;
+	int pointIndex = vertexIndex/2;
+	if (pointIndex < SCREEN_POINTS.length) {
+		fragData.color = SCREEN_POINT_COLORS[pointIndex];
+		vertex = SCREEN_POINTS[pointIndex];
+	} else {
+		fragData.color = vec4(1,1,1,1);
+		vertex = ScreenPointTestPoint;
+	}
+
+	if (vertexIndex % 2 == 0) {
+		//fragData.color  = vec4(vec3(1,1,1)-fragData.rgb,1);
+		vertex = vec3(0,0,0);
+	}
+
+	fragData.pos = vertex;
+
+	return paramOrthoSphereCamera(vertex);
+}
+glsl vec4 ScreenPointTestFrag(in ScreenPointTextFragData fragData) {
+	if (abs(fragData.pos.x-ScreenPointTestPoint.x)<0.01) {
+		return vec4(vec3(1,1,1)-fragData.color.rgb,1);
+	}
+	if (abs(fragData.pos.y-ScreenPointTestPoint.y)<0.01) {
+		return vec4(vec3(1,1,1)-fragData.color.rgb,1);
+	}
+	if (abs(fragData.pos.z-ScreenPointTestPoint.z)<0.01) {
+		return vec4(vec3(1,1,1)-fragData.color.rgb,1);
+	}
+	return fragData.color;
+}
+model ScreenPointTest : 
+	fragment_data(ScreenPointTextFragData),
+	vertex(ScreenPointTestVert,lines,7*2),
+	fragment(ScreenPointTestFrag);*/
